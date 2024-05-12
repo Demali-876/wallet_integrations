@@ -14,5 +14,8 @@
   "type": "module",
   "workspaces": [
     "src/wallet_integrations_frontend"
-  ]
+  ],
+  "dependencies": {
+    "@dfinity/auth-client": "^1.3.0"
+  }
 }
