@@ -7,25 +7,11 @@
   import { AuthClient } from "@dfinity/auth-client";
   import { HttpAgent } from "@dfinity/agent";
 
-  let actor = backend;
+  let actor;
   let principal = writable("");
-  let greeting = writable("");
-
-  async function handleWhoAmI() {
-      const principalResult = await actor.whoami();
-      principal.set(principalResult.toString());
-  };
 
   async function handleLogin(buttonId) {
     let authClient = await AuthClient.create();
-
-    // Define window features outside to avoid redundancy
-    const windowFeatures = `
-        left=${window.screen.width / 2 - 525 / 2},
-        top=${window.screen.height / 2 - 705 / 2},
-        toolbar=0,location=0,menubar=0,width=525,height=705
-    `;
-
     try {
         if (buttonId === "ii") {
             await new Promise((resolve, reject) => {
@@ -35,6 +21,7 @@
                         : `http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:4943`,
                     onSuccess: () => {
                         setActorAfterLogin(authClient);
+                        handleWhoAmI();
                         resolve();
                     },
                     onError: reject
@@ -48,61 +35,54 @@
 
             await authClient.login({
                 identityProvider,
-                onSuccess: () => setActorAfterLogin(authClient),
-                windowFeatures,
+                onSuccess: () => {setActorAfterLogin(authClient); 
+                                  handleWhoAmI();},
                 onError: (error) => {
                     console.error("NFID login failed:", error);
-                    throw error; 
+                    throw error;
                 }
             });
-        } else if (buttonId == "plug") {
-          const whitelist = [canisterId];
-          const hasAllowed = await window.ic?.plug?.requestConnect({whitelist,});
-          if (hasAllowed) {console.error("Connection was refused",error);}
-          return;
+        } else if (buttonId === "plug") {
+            if (!window.ic?.plug) {
+                console.error("Plug wallet is not available.");
+                return;
+            }
+            const whitelist = [canisterId];
+            const hasAllowed = await window.ic.plug.requestConnect({ whitelist });
+            if (!hasAllowed) {
+                console.error("Connection was refused.");
+                return;
+            }
+            console.log("Plug wallet is connected.");
+            try{
+              const backendActor = await window.ic.plug.createActor({
+                canisterId: canisterId,
+                interfaceFactory: idlFactory, 
+            });
+            actor = backendActor;
+            handleWhoAmI();
+            }catch(e){console.error("Failed to initialize the actor with Plug.", e);};
+            console.log("Integration actor initialized successfully.");
         }
-        console.log("Plug wallet is connected");
-        if (!window.ic.plug?.agent) {
-        console.log ("Oops! Failed to initialise the Agent...");
-        return;
-      }
-      const backendActor = await window.ic.plug?.createActor({
-      canisterId,
-      idlFactory,
-      });
-      if (!backendActor) {
-    console.log("Oops! Failed to initialise the integration Actor...");
-    return;
-  }
     } catch (error) {
         console.error("Login failed:", error);
-    }
+    };
 }
-
+async function handleWhoAmI() {
+      const principalResult = await actor.whoami();
+      principal.set(principalResult.toString());
+  };
 function setActorAfterLogin(authClient) {
     const identity = authClient.getIdentity();
     const agent = new HttpAgent({ identity });
     actor = createActor(canisterId, { agent });
 }
-
-  function onSubmit(event) {
-      const name = event.target.name.value;
-      backend.greet(name).then(response => {
-        greeting.set(response);
-      });
-  }
 </script>
 
 <main>
   <img src="/logo2.svg" alt="DFINITY logo" />
   <br />
   <br />
-  <form on:submit|preventDefault={onSubmit}>
-    <label for="name">Enter your name: &nbsp;</label>
-    <input id="name" alt="Name" type="text" />
-    <button type="submit">Click Me!</button>
-  </form>
-  <section>{$greeting}</section>
   <form>
     <button on:click={() => handleLogin('ii')}>Login with Internet Identity</button>
   </form>
@@ -115,9 +95,6 @@ function setActorAfterLogin(authClient) {
     <button on:click={() => handleLogin('plug')}>Login with Plug</button>
   </form>
   <br />
-  <form>
-    <button type="button" on:click={handleWhoAmI}>Who Am I</button>
-  </form>
   <section>{$principal}</section>
 </main>
 
